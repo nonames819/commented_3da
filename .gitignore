@@ -28,6 +28,7 @@ calvin/
 
 # data directory
 data/
+instruction/
 
 PyRep/
 RLBench/

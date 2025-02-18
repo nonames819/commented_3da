@@ -184,7 +184,7 @@ def quaternion_to_matrix(quaternions: torch.Tensor) -> torch.Tensor:
         ),
         -1,
     )
-    return o.reshape(quaternions.shape[:-1] + (3, 3))
+    return o.reshape(quaternions.shape[:-1] + (3, 3)) # 最后一维9拆成3*3的矩阵形式
 
 
 def _sqrt_positive_part(x: torch.Tensor) -> torch.Tensor:

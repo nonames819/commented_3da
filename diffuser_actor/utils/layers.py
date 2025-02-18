@@ -121,7 +121,7 @@ class ParallelAttentionLayer(nn.Module):
         """Forward pass, seq1 (B, S1, F), seq2 (B, S2, F)."""
         rot_args = {}
 
-        # Create key, query, value for seq1, seq2
+        # Create key, query, value for seq1, seq2    shape: torch.Size([36, 4096, 120])
         q1 = k1 = v1 = self._norm(seq1, self.norm_12, self.pre_norm)
         q2 = k2 = v2 = self._norm(seq2, self.norm_21, self.pre_norm)
         if not self.rotary_pe:
@@ -143,7 +143,7 @@ class ParallelAttentionLayer(nn.Module):
                 attn_mask=None,
                 key_padding_mask=seq2_key_padding_mask,  # (B, S2)
                 **rot_args
-            )[0].transpose(0, 1)
+            )[0].transpose(0, 1) # torch.Size([36, 4096, 120])
             seq1 = seq1 + self.dropout_12(seq1b)
             seq1 = self._norm(seq1, self.norm_12, not self.pre_norm)
 

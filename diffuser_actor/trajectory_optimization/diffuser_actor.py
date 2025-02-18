@@ -79,27 +79,27 @@ class DiffuserActor(nn.Module):
         # Compute visual features/positional embeddings at different scales
         rgb_feats_pyramid, pcd_pyramid = self.encoder.encode_images(
             visible_rgb, visible_pcd
-        )
+        ) 
         # Keep only low-res scale
         context_feats = einops.rearrange(
             rgb_feats_pyramid[0],
             "b ncam c h w -> b (ncam h w) c"
         )
-        context = pcd_pyramid[0]
+        context = pcd_pyramid[0] # rgb和pcd都被flatten了中间层维度
 
         # Encode instruction (B, 53, F)
         instr_feats = None
         if self.use_instruction:
-            instr_feats, _ = self.encoder.encode_instruction(instruction)
+            instr_feats, _ = self.encoder.encode_instruction(instruction) # instr的pe直接没用？
 
         # Cross-attention vision to language
         if self.use_instruction:
-            # Attention from vision to language
+            # Attention from vision to language 算了一个v2l的cross attention，里面很大一通都是条件判断使用哪种attention
             context_feats = self.encoder.vision_language_attention(
                 context_feats, instr_feats
             )
 
-        # Encode gripper history (B, nhist, F)
+        # Encode gripper history (B, nhist, F) peract这里直接没用RoPE计算出的PE
         adaln_gripper_feats, _ = self.encoder.encode_curr_gripper(
             curr_gripper, context_feats, context
         )
@@ -108,7 +108,7 @@ class DiffuserActor(nn.Module):
         fps_feats, fps_pos = self.encoder.run_fps(
             context_feats.transpose(0, 1),
             self.encoder.relative_pe_layer(context)
-        )
+        ) # torch.Size([819, 36, 120]) torch.Size([36, 819, 120, 2])
         return (
             context_feats, context,  # contextualized visual features
             instr_feats,  # language features
@@ -250,8 +250,8 @@ class DiffuserActor(nn.Module):
         if self._rotation_parametrization == '6D':
             # The following code expects wxyz quaternion format!
             if self._quaternion_format == 'xyzw':
-                signal[..., 3:7] = signal[..., (6, 3, 4, 5)]
-            rot = quaternion_to_matrix(signal[..., 3:7])
+                signal[..., 3:7] = signal[..., (6, 3, 4, 5)] # 转成wxyz
+            rot = quaternion_to_matrix(signal[..., 3:7]) #转成旋转矩阵
             res = signal[..., 7:] if signal.size(-1) > 7 else None
             if len(rot.shape) == 4:
                 B, L, D1, D2 = rot.shape
@@ -313,7 +313,7 @@ class DiffuserActor(nn.Module):
             rgb_obs: (B, num_cameras, 3, H, W) in [0, 1]
             pcd_obs: (B, num_cameras, 3, H, W) in world coordinates
             instruction: (B, max_instruction_length, 512)
-            curr_gripper: (B, nhist, 3+4+X) chd: 其实可能包含了hist, 相当于proprio.输入
+            curr_gripper: (B, nhist, 3+4+X) chd: 其实可能包含hist, 相当于proprio.输入
 
         Note:
             Regardless of rotation parametrization, the input rotation
@@ -325,7 +325,7 @@ class DiffuserActor(nn.Module):
         if gt_trajectory is not None:
             gt_openess = gt_trajectory[..., 7:]
             gt_trajectory = gt_trajectory[..., :7]
-        curr_gripper = curr_gripper[..., :7] # 去掉了最后一个维度，TODO: 为什么不关注是否开闭
+        curr_gripper = curr_gripper[..., :7] # 去掉了最后一个维度，TODO: 为什么不关注是否开闭,overview.md里提到act3d最后一维是8，可能是为了代码复用性？
 
         # gt_trajectory is expected to be in the quaternion format
         if run_inference:
@@ -360,10 +360,10 @@ class DiffuserActor(nn.Module):
         cond_mask = torch.zeros_like(cond_data)
         cond_mask = cond_mask.bool()
 
-        # Sample noise
+        # Sample noise torch.Size([36, 1, 9])
         noise = torch.randn(gt_trajectory.shape, device=gt_trajectory.device)
 
-        # Sample a random timestep
+        # Sample a random timestep 
         timesteps = torch.randint(
             0,
             self.position_noise_scheduler.config.num_train_timesteps,
@@ -421,7 +421,7 @@ class DiffusionHead(nn.Module):
         else:
             rotation_dim = 4  # quaternion
 
-        # Encoders
+        # Encoders  
         self.traj_encoder = nn.Linear(9, embedding_dim)
         self.relative_pe_layer = RotaryPositionEncoding3D(embedding_dim)
         self.time_emb = nn.Sequential(
@@ -520,13 +520,13 @@ class DiffusionHead(nn.Module):
             fps_feats: (N, B, F), N < context_feats.size(1)
             fps_pos: (B, N, F, 2)
         """
-        # Trajectory features
+        # Trajectory features 
         traj_feats = self.traj_encoder(trajectory)  # (B, L, F)
 
-        # Trajectory features cross-attend to context features
+        # Trajectory features cross-attend to context features 预测keypose时traj_len=1，这个意义就不大了
         traj_time_pos = self.traj_time_emb(
             torch.arange(0, traj_feats.size(1), device=traj_feats.device)
-        )[None].repeat(len(traj_feats), 1, 1)
+        )[None].repeat(len(traj_feats), 1, 1) # torch.Size([36, 1, 120])
         if self.use_instruction:
             traj_feats, _ = self.traj_lang_attention[0](
                 seq1=traj_feats, seq1_key_padding_mask=None,
@@ -571,7 +571,7 @@ class DiffusionHead(nn.Module):
             sampled_rel_context_pos: A tensor of shape (B, K, F, 2)
             instr_feats: (B, max_instruction_length, F)
         """
-        # Diffusion timestep
+        # Diffusion timestep 36->36*120
         time_embs = self.encode_denoising_timestep(
             timesteps, curr_gripper_features
         )
@@ -612,7 +612,7 @@ class DiffusionHead(nn.Module):
             features, rel_pos, time_embs, num_gripper, instr_feats
         )
 
-        # Openess head from position head
+        # Openess head from position head (just a MLP)
         openess = self.openess_predictor(position_features)
 
         return position, rotation, openess
@@ -647,7 +647,7 @@ class DiffusionHead(nn.Module):
         )[-1]
         position_features = einops.rearrange(
             position_features[:num_gripper], "npts b c -> b npts c"
-        )
+        ) # gripper_feat充当cls
         position_features = self.position_proj(position_features)  # (B, N, C)
         position = self.position_predictor(position_features)
         return position, position_features
@@ -663,7 +663,7 @@ class DiffusionHead(nn.Module):
         )[-1]
         rotation_features = einops.rearrange(
             rotation_features[:num_gripper], "npts b c -> b npts c"
-        )
+        ) # the first element is gripper_feat
         rotation_features = self.rotation_proj(rotation_features)  # (B, N, C)
         rotation = self.rotation_predictor(rotation_features)
         return rotation

@@ -128,8 +128,8 @@ class Encoder(nn.Module):
 
         Args:
             - gripper: (B, npt, 3+)
-            - context_feats: (B, npt, C)
-            - context: (B, npt, 3)
+            - context_feats: (B, npt, C) rgb_features
+            - context: (B, npt, 3) pcds
 
         Returns:
             - gripper_feats: (B, npt, F)
@@ -138,7 +138,7 @@ class Encoder(nn.Module):
         # Learnable embedding for gripper
         gripper_feats = gripper_embed.weight.unsqueeze(0).repeat(
             len(gripper), 1, 1
-        )
+        ) # torch.Size([36, 3, 120])
 
         # Rotary positional encoding
         gripper_pos = self.relative_pe_layer(gripper[..., :3])
@@ -149,16 +149,16 @@ class Encoder(nn.Module):
         )
         context_feats = einops.rearrange(
             context_feats, 'b npt c -> npt b c'
-        )
+        ) # num of points
         gripper_feats = self.gripper_context_head(
             query=gripper_feats, value=context_feats,
             query_pos=gripper_pos, value_pos=context_pos
-        )[-1]
+        )[-1] # 多层transformer enc最后一层结果
         gripper_feats = einops.rearrange(
             gripper_feats, 'nhist b c -> b nhist c'
         )
 
-        return gripper_feats, gripper_pos
+        return gripper_feats, gripper_pos # torch.Size([36, 3, 120]), torch.Size([36, 3, 120, 2])
 
     def encode_images(self, rgb, pcd):
         """
@@ -189,7 +189,7 @@ class Encoder(nn.Module):
         pcd_pyramid = []
         for i in range(self.num_sampling_level):
             # Isolate level's visual features
-            rgb_features_i = rgb_features[self.feature_map_pyramid[i]]
+            rgb_features_i = rgb_features[self.feature_map_pyramid[i]] # 最后一层的特征
 
             # Interpolate xy-depth to get the locations for this level
             feat_h, feat_w = rgb_features_i.shape[-2:]
@@ -197,14 +197,14 @@ class Encoder(nn.Module):
                 pcd,
                 (feat_h, feat_w),
                 mode='bilinear'
-            )
+            ) # 把点云插值到同一尺寸 TODO：可以修改吗？
 
             # Merge different cameras for clouds, separate for rgb features
             h, w = pcd_i.shape[-2:]
             pcd_i = einops.rearrange(
                 pcd_i,
                 "(bt ncam) c h w -> bt (ncam h w) c", ncam=num_cameras
-            )
+            ) # 插值后的所有点云
             rgb_features_i = einops.rearrange(
                 rgb_features_i,
                 "(bt ncam) c h w -> bt ncam c h w", ncam=num_cameras
@@ -226,7 +226,7 @@ class Encoder(nn.Module):
             - instr_feats: (B, 53, F)
             - instr_dummy_pos: (B, 53, F, 2)
         """
-        instr_feats = self.instruction_encoder(instruction)
+        instr_feats = self.instruction_encoder(instruction) #直接降到120维
         # Dummy positional embeddings, all 0s
         instr_dummy_pos = torch.zeros(
             len(instruction), instr_feats.shape[1], 3,
@@ -248,7 +248,7 @@ class Encoder(nn.Module):
                 "npts b c -> b npts c"
             ).to(torch.float64),
             max(npts // self.fps_subsampling_factor, 1), 0
-        ).long()
+        ).long() # torch.Size([36, 819])
 
         # Sample features
         expanded_sampled_inds = sampled_inds.unsqueeze(-1).expand(-1, -1, ch)

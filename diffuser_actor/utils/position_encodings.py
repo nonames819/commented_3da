@@ -64,17 +64,17 @@ class RotaryPositionEncoding3D(RotaryPositionEncoding):
     def forward(self, XYZ):
         '''
         @param XYZ: [B,N,3]
-        @return:
+        @return: [B,N,F_D,2]
         '''
         bsize, npoint, _ = XYZ.shape
         x_position, y_position, z_position = XYZ[..., 0:1], XYZ[..., 1:2], XYZ[..., 2:3]
         div_term = torch.exp(
             torch.arange(0, self.feature_dim // 3, 2, dtype=torch.float, device=XYZ.device)
             * (-math.log(10000.0) / (self.feature_dim // 3))
-        )
+        ) # 分成三份再分奇偶 120 / 6 = 20
         div_term = div_term.view(1, 1, -1)  # [1, 1, d//6]
 
-        sinx = torch.sin(x_position * div_term)  # [B, N, d//6]
+        sinx = torch.sin(x_position * div_term)  # [B, N, d//6]   torch.Size([36, 4096, 1])*torch.Size([20])
         cosx = torch.cos(x_position * div_term)
         siny = torch.sin(y_position * div_term)
         cosy = torch.cos(y_position * div_term)

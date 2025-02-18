@@ -101,7 +101,7 @@ class TrainTester(BaseTrainTester):
                 (task, var)
                 for task, var_instr in instruction.items()
                 for var in var_instr.keys()
-            ]
+            ] # 每个任务中的多个case编号分离开来各自与任务名组合
 
         # Initialize datasets with arguments
         train_dataset = RLBenchDataset(
@@ -181,7 +181,7 @@ class TrainTester(BaseTrainTester):
         curr_gripper = (
             sample["curr_gripper"] if self.args.num_history < 1
             else sample["curr_gripper_history"][:, -self.args.num_history:]
-        ) # chd: torch.Size([36, 3, 8])
+        ) # chd: torch.Size([36, 3, 8]) num_hist=3
         out = model(
             sample["trajectory"],
             sample["trajectory_mask"],
@@ -287,7 +287,7 @@ class TrainTester(BaseTrainTester):
         return values.get('val-losses/traj_pos_acc_001', None)
 
 
-def traj_collate_fn(batch):
+def traj_collate_fn(batch): # 用于将bs数量的样本整合成一个批次的数据，多次getitem的结果输入
     keys = [
         "trajectory", "trajectory_mask",
         "rgbs", "pcds",
@@ -299,11 +299,11 @@ def traj_collate_fn(batch):
             for item in batch
         ]) for key in keys
     } # traj: torch.Size([36, 2, 8]) traj_mask: torch.Size([36, 2]) rgbs: torch.Size([36, 4, 3, 256, 256])
-
+    # 这里吧bs=8的数据重组，每个数据里有同一个任务的多组eps，加起来一共36条，每一次这个数值都可能不一样
     ret_dict["task"] = []
     for item in batch:
         ret_dict["task"] += item['task'] # 只是一个标签，不是数值形式，因此不使用cat连接
-    return ret_dict # 每一个插值后得到的轨迹都有一组对应的obs
+    return ret_dict # 每一个插值后得到的轨迹都有一组对应的obs ?
 
 
 class TrajectoryCriterion:
@@ -422,7 +422,7 @@ if __name__ == '__main__':
         args.gripper_loc_bounds = get_gripper_loc_bounds(
             args.gripper_loc_bounds,
             task=args.tasks[0] if len(args.tasks) == 1 else None,
-            buffer=args.gripper_loc_bounds_buffer,
+            buffer=args.gripper_loc_bounds_buffer, # buffer=0.04
         )
     log_dir = args.base_log_dir / args.exp_log_dir / args.run_log_dir
     args.log_dir = log_dir

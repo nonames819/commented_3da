@@ -22,7 +22,7 @@ def normalise_quat(x: torch.Tensor):
 
 def get_gripper_loc_bounds(path: str, buffer: float = 0.0, task: Optional[str] = None):
     gripper_loc_bounds = json.load(open(path, "r"))
-    if task is not None and task in gripper_loc_bounds:
+    if task is not None and task in gripper_loc_bounds: # one task
         gripper_loc_bounds = gripper_loc_bounds[task]
         gripper_loc_bounds_min = np.array(gripper_loc_bounds[0]) - buffer
         gripper_loc_bounds_max = np.array(gripper_loc_bounds[1]) + buffer
@@ -54,13 +54,13 @@ def load_instructions(
         with open(instructions, "rb") as fid:
             data: Instructions = pickle.load(fid)
         if tasks is not None:
-            data = {task: var_instr for task, var_instr in data.items() if task in tasks}
+            data = {task: var_instr for task, var_instr in data.items() if task in tasks} # 每一条instruction编码成n*53*512
         if variations is not None:
             data = {
                 task: {
                     var: instr for var, instr in var_instr.items() if var in variations
                 }
-                for task, var_instr in data.items()
+                for task, var_instr in data.items() # 筛选范围内的var cases
             }
         return data
     return None
